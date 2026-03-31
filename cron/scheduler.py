@@ -51,6 +51,15 @@ _LOCK_DIR = _hermes_home / "cron"
 _LOCK_FILE = _LOCK_DIR / ".tick.lock"
 
 
+def _is_process_running(pid: int) -> bool:
+    """Check if a process with the given PID is currently running."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
 def _resolve_origin(job: dict) -> Optional[dict]:
     """Extract origin info from a job, preserving any extra routing metadata."""
     origin = job.get("origin")
@@ -531,7 +540,21 @@ def tick(verbose: bool = True) -> int:
     # Cross-platform file locking: fcntl on Unix, msvcrt on Windows
     lock_fd = None
     try:
+        # Check for stale lock file (PID written but process no longer running)
+        if _LOCK_FILE.exists():
+            try:
+                stale_pid = int(_LOCK_FILE.read_text().strip())
+                if stale_pid != os.getpid() and not _is_process_running(stale_pid):
+                    logger.debug("Removing stale lock file (PID %d no longer running)", stale_pid)
+                    _LOCK_FILE.unlink()
+            except (ValueError, OSError):
+                # Invalid PID in lock file, remove it
+                _LOCK_FILE.unlink()
+
         lock_fd = open(_LOCK_FILE, "w")
+        # Write our PID to the lock file for stale lock detection
+        lock_fd.write(str(os.getpid()))
+        lock_fd.flush()
         if fcntl:
             fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         elif msvcrt:

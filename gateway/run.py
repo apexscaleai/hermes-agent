@@ -5931,7 +5931,7 @@ def _start_cron_ticker(stop_event: threading.Event, adapters=None, interval: int
         try:
             cron_tick(verbose=False)
         except Exception as e:
-            logger.debug("Cron tick error: %s", e)
+            logger.error("Cron tick error: %s", e)
 
         tick_count += 1
 
