@@ -40,7 +40,7 @@ class TestCLISubagentInterrupt(unittest.TestCase):
 
         # Create a real-enough parent agent
         parent = AIAgent.__new__(AIAgent)
-        parent._interrupt_requested = False
+        parent._interrupt_requested = threading.Event()
         parent._interrupt_message = None
         parent._active_children = []
         parent._active_children_lock = threading.Lock()
@@ -76,7 +76,7 @@ class TestCLISubagentInterrupt(unittest.TestCase):
             
             # Simulate the agent loop: poll _interrupt_requested like run_conversation does
             for i in range(100):  # Up to 10 seconds (100 * 0.1s)
-                if child and child._interrupt_requested:
+                if child and child._interrupt_requested.is_set():
                     interrupt_detected.set()
                     return {
                         "final_response": "Interrupted!",
@@ -110,13 +110,13 @@ class TestCLISubagentInterrupt(unittest.TestCase):
             try:
                 with patch('run_agent.AIAgent') as MockAgent:
                     mock_instance = MagicMock()
-                    mock_instance._interrupt_requested = False
+                    mock_instance._interrupt_requested = threading.Event()
                     mock_instance._interrupt_message = None
                     mock_instance._active_children = []
                     mock_instance._active_children_lock = threading.Lock()
                     mock_instance.quiet_mode = True
                     mock_instance.run_conversation = mock_child_run_conversation
-                    mock_instance.interrupt = lambda msg=None: setattr(mock_instance, '_interrupt_requested', True) or setattr(mock_instance, '_interrupt_message', msg)
+                    mock_instance.interrupt = lambda msg=None: mock_instance._interrupt_requested.set() or setattr(mock_instance, '_interrupt_message', msg)
                     mock_instance.tools = []
                     MockAgent.return_value = mock_instance
 

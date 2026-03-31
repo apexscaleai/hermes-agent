@@ -27,14 +27,14 @@ class TestInterruptPropagationToChild(unittest.TestCase):
         from run_agent import AIAgent
 
         parent = AIAgent.__new__(AIAgent)
-        parent._interrupt_requested = False
+        parent._interrupt_requested = threading.Event()
         parent._interrupt_message = None
         parent._active_children = []
         parent._active_children_lock = threading.Lock()
         parent.quiet_mode = True
 
         child = AIAgent.__new__(AIAgent)
-        child._interrupt_requested = False
+        child._interrupt_requested = threading.Event()
         child._interrupt_message = None
         child._active_children = []
         child._active_children_lock = threading.Lock()
@@ -44,8 +44,8 @@ class TestInterruptPropagationToChild(unittest.TestCase):
 
         parent.interrupt("new user message")
 
-        assert parent._interrupt_requested is True
-        assert child._interrupt_requested is True
+        assert parent._interrupt_requested.is_set() is True
+        assert child._interrupt_requested.is_set() is True
         assert child._interrupt_message == "new user message"
         assert is_interrupted() is True
 
@@ -58,7 +58,8 @@ class TestInterruptPropagationToChild(unittest.TestCase):
         from run_agent import AIAgent
 
         child = AIAgent.__new__(AIAgent)
-        child._interrupt_requested = True
+        child._interrupt_requested = threading.Event()
+        child._interrupt_requested.set()
         child._interrupt_message = "msg"
         child.quiet_mode = True
         child._active_children = []
@@ -70,7 +71,7 @@ class TestInterruptPropagationToChild(unittest.TestCase):
 
         # child.clear_interrupt() clears both
         child.clear_interrupt()
-        assert child._interrupt_requested is False
+        assert child._interrupt_requested.is_set() is False
         assert is_interrupted() is False
 
     def test_interrupt_during_child_api_call_detected(self):
@@ -78,7 +79,7 @@ class TestInterruptPropagationToChild(unittest.TestCase):
         from run_agent import AIAgent
 
         child = AIAgent.__new__(AIAgent)
-        child._interrupt_requested = False
+        child._interrupt_requested = threading.Event()
         child._interrupt_message = None
         child._active_children = []
         child._active_children_lock = threading.Lock()
@@ -120,14 +121,14 @@ class TestInterruptPropagationToChild(unittest.TestCase):
         from run_agent import AIAgent
 
         parent = AIAgent.__new__(AIAgent)
-        parent._interrupt_requested = False
+        parent._interrupt_requested = threading.Event()
         parent._interrupt_message = None
         parent._active_children = []
         parent._active_children_lock = threading.Lock()
         parent.quiet_mode = True
 
         child = AIAgent.__new__(AIAgent)
-        child._interrupt_requested = False
+        child._interrupt_requested = threading.Event()
         child._interrupt_message = None
         child._active_children = []
         child._active_children_lock = threading.Lock()
@@ -139,7 +140,7 @@ class TestInterruptPropagationToChild(unittest.TestCase):
         # Simulate child running (checking flag in a loop)
         child_detected = threading.Event()
         def simulate_child_loop():
-            while not child._interrupt_requested:
+            while not child._interrupt_requested.is_set():
                 time.sleep(0.05)
             child_detected.set()
 

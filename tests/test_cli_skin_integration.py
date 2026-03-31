@@ -13,7 +13,7 @@ def _make_cli_stub():
     cli._clarify_state = None
     cli._clarify_freetext = False
     cli._command_running = False
-    cli._agent_running = False
+    cli._agent_running = threading.Event()
     cli._voice_recording = False
     cli._voice_processing = False
     cli._voice_mode = False

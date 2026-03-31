@@ -1238,7 +1238,7 @@ class HermesCLI:
         # State shared by interactive run() and single-query chat mode.
         # These must exist before any direct chat() call because single-query
         # mode does not go through run().
-        self._agent_running = False
+        self._agent_running = threading.Event()
         self._pending_input = queue.Queue()
         self._interrupt_queue = queue.Queue()
         self._should_exit = False
@@ -3912,7 +3912,7 @@ class HermesCLI:
                 _cprint("  Usage: /queue <prompt>")
             else:
                 self._pending_input.put(payload)
-                if self._agent_running:
+                if self._agent_running.is_set():
                     _cprint(f"  Queued for the next turn: {payload[:80]}{'...' if len(payload) > 80 else ''}")
                 else:
                     _cprint(f"  Queued: {payload[:80]}{'...' if len(payload) > 80 else ''}")
@@ -4112,7 +4112,7 @@ class HermesCLI:
 
                 def _bg_thinking(text: str) -> None:
                     # Concurrent bg tasks may race on _spinner_text; acceptable for best-effort UI.
-                    if not self._agent_running:
+                    if not self._agent_running.is_set():
                         self._spinner_text = text
                         if self._app:
                             self._app.invalidate()
@@ -4181,7 +4181,7 @@ class HermesCLI:
             finally:
                 self._background_tasks.pop(task_id, None)
                 # Clear spinner only if no foreground agent owns it
-                if not self._agent_running:
+                if not self._agent_running.is_set():
                     self._spinner_text = ""
                 if self._app:
                     self._invalidate(min_interval=0)
@@ -6097,7 +6097,7 @@ class HermesCLI:
             return [("class:prompt-working", f"? {state_suffix}")]
         if self._command_running:
             return [("class:prompt-working", f"{self._command_spinner_frame()} {state_suffix}")]
-        if self._agent_running:
+        if self._agent_running.is_set():
             return [("class:prompt-working", f"⚕ {state_suffix}")]
         if self._voice_mode:
             return [("class:voice-prompt", f"🎤 {state_suffix}")]
@@ -6234,7 +6234,7 @@ class HermesCLI:
         self.console.print()
         
         # State for async operation
-        self._agent_running = False
+        self._agent_running = threading.Event()
         self._pending_input = queue.Queue()     # For normal input (commands + new queries)
         self._interrupt_queue = queue.Queue()   # For messages typed while agent is running
         self._should_exit = False
@@ -6386,7 +6386,7 @@ class HermesCLI:
                 event.app.invalidate()
                 # Bundle text + images as a tuple when images are present
                 payload = (text, images) if images else text
-                if self._agent_running and not (text and text.startswith("/")):
+                if self._agent_running.is_set() and not (text and text.startswith("/")):
                     if self.busy_input_mode == "queue":
                         # Queue for the next turn instead of interrupting
                         self._pending_input.put(payload)
@@ -6400,7 +6400,7 @@ class HermesCLI:
                             with open(_dbg, "a") as _f:
                                 import time as _t
                                 _f.write(f"{_t.strftime('%H:%M:%S')} ENTER: queued interrupt msg={str(payload)[:60]!r}, "
-                                         f"agent_running={self._agent_running}\n")
+                                         f"agent_running={self._agent_running.is_set()}\n")
                         except Exception:
                             pass
                 else:
@@ -6566,7 +6566,7 @@ class HermesCLI:
                 event.app.invalidate()
                 return
 
-            if self._agent_running and self.agent:
+            if self._agent_running.is_set() and self.agent:
                 if now - self._last_ctrl_c_time < 2.0:
                     print("\n⚡ Force exiting...")
                     self._should_exit = True
@@ -6644,7 +6644,7 @@ class HermesCLI:
                 ).start()
             else:
                 # Guard: don't START recording during agent run or interactive prompts
-                if cli_ref._agent_running:
+                if cli_ref._agent_running.is_set():
                     return
                 if cli_ref._clarify_state or cli_ref._sudo_state or cli_ref._approval_state:
                     return
@@ -6887,7 +6887,7 @@ class HermesCLI:
                 frame = cli_ref._command_spinner_frame()
                 status = cli_ref._command_status or "Processing command..."
                 return f"{frame} {status}"
-            if cli_ref._agent_running:
+            if cli_ref._agent_running.is_set():
                 return "type a message + Enter to interrupt, Ctrl+C to cancel"
             if cli_ref._voice_mode:
                 return "type or Ctrl+B to record"
@@ -6948,7 +6948,7 @@ class HermesCLI:
                 return 1
             # Keep a 1-line spacer while agent runs so output doesn't push
             # right up against the top rule of the input area
-            return 1 if cli_ref._agent_running else 0
+            return 1 if cli_ref._agent_running.is_set() else 0
 
         def get_spinner_text():
             txt = cli_ref._spinner_text
@@ -7338,7 +7338,7 @@ class HermesCLI:
                         user_input = self._pending_input.get(timeout=0.1)
                     except queue.Empty:
                         # Periodic config watcher — auto-reload MCP on mcp_servers change
-                        if not self._agent_running:
+                        if not self._agent_running.is_set():
                             self._check_config_mcp_changes()
                         continue
                     
@@ -7411,13 +7411,13 @@ class HermesCLI:
                         _cprint(f"  {_DIM}📎 {n} image{'s' if n > 1 else ''} attached{_RST}")
 
                     # Regular chat - run agent
-                    self._agent_running = True
+                    self._agent_running.set()
                     app.invalidate()  # Refresh status line
 
                     try:
                         self.chat(user_input, images=submit_images or None)
                     finally:
-                        self._agent_running = False
+                        self._agent_running.clear()
                         self._spinner_text = ""
                         app.invalidate()  # Refresh status line
 

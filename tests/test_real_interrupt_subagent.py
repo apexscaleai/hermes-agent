@@ -52,7 +52,7 @@ class TestRealSubagentInterrupt(unittest.TestCase):
 
         # Create a real parent agent (just enough to be a parent)
         parent = AIAgent.__new__(AIAgent)
-        parent._interrupt_requested = False
+        parent._interrupt_requested = threading.Event()
         parent._interrupt_message = None
         parent._active_children = []
         parent._active_children_lock = threading.Lock()

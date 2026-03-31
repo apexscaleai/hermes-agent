@@ -9,7 +9,7 @@ def _make_cli(tmp_path, mcp_servers=None):
     import cli as cli_mod
     obj = object.__new__(cli_mod.HermesCLI)
     obj.config = {"mcp_servers": mcp_servers or {}}
-    obj._agent_running = False
+    obj._agent_running = threading.Event()
     obj._last_config_check = 0.0
     obj._config_mcp_servers = mcp_servers or {}
 

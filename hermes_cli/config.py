@@ -1442,9 +1442,17 @@ _FALLBACK_COMMENT = """
 #
 # For custom OpenAI-compatible endpoints, add base_url and api_key_env.
 #
+# Single fallback (dict format):
 # fallback_model:
 #   provider: openrouter
 #   model: anthropic/claude-sonnet-4
+#
+# Multiple fallbacks (list format — tried in order):
+# fallback_model:
+#   - provider: openrouter
+#     model: anthropic/claude-sonnet-4
+#   - provider: zai
+#     model: glm-4.7
 #
 # ── Smart Model Routing ────────────────────────────────────────────────
 # Optional cheap-vs-strong routing for simple turns.
@@ -1522,7 +1530,18 @@ def save_config(config: Dict[str, Any]):
     if not sec or sec.get("redact_secrets") is None:
         parts.append(_SECURITY_COMMENT)
     fb = normalized.get("fallback_model", {})
-    if not fb or not (fb.get("provider") and fb.get("model")):
+    # Check if fallback_model is properly configured:
+    # - list format: at least one entry with both provider and model
+    # - dict format: has both provider and model keys
+    fb_is_valid = False
+    if isinstance(fb, list):
+        fb_is_valid = any(
+            isinstance(f, dict) and f.get("provider") and f.get("model")
+            for f in fb
+        )
+    elif isinstance(fb, dict):
+        fb_is_valid = bool(fb.get("provider") and fb.get("model"))
+    if not fb_is_valid:
         parts.append(_FALLBACK_COMMENT)
 
     atomic_yaml_write(

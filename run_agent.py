@@ -631,7 +631,7 @@ class AIAgent:
         self._executing_tools = False
 
         # Interrupt mechanism for breaking out of tool loops
-        self._interrupt_requested = False
+        self._interrupt_requested = threading.Event()
         self._interrupt_message = None  # Optional message that triggered interrupt
         self._client_lock = threading.RLock()
         
@@ -2245,7 +2245,7 @@ class AIAgent:
             if session_has_running_agent:
                 running_agent.interrupt(new_message.text)
         """
-        self._interrupt_requested = True
+        self._interrupt_requested.set()
         self._interrupt_message = message
         # Signal all tools to abort any in-flight operations immediately
         _set_interrupt(True)
@@ -2262,7 +2262,7 @@ class AIAgent:
     
     def clear_interrupt(self) -> None:
         """Clear any pending interrupt request and the global tool interrupt signal."""
-        self._interrupt_requested = False
+        self._interrupt_requested.clear()
         self._interrupt_message = None
         _set_interrupt(False)
     
@@ -2301,7 +2301,7 @@ class AIAgent:
     @property
     def is_interrupted(self) -> bool:
         """Check if an interrupt has been requested."""
-        return self._interrupt_requested
+        return self._interrupt_requested.is_set()
 
     # ── Honcho integration helpers ──
 
@@ -3584,7 +3584,7 @@ class AIAgent:
             try:
                 with active_client.responses.stream(**api_kwargs) as stream:
                     for event in stream:
-                        if self._interrupt_requested:
+                        if self._interrupt_requested.is_set():
                             break
                         event_type = getattr(event, "type", "")
                         # Fire callbacks on text content deltas (suppress during tool calls)
@@ -3812,7 +3812,7 @@ class AIAgent:
         t.start()
         while t.is_alive():
             t.join(timeout=0.3)
-            if self._interrupt_requested:
+            if self._interrupt_requested.is_set():
                 # Force-close the in-flight worker-local HTTP connection to stop
                 # token generation without poisoning the shared client used to
                 # seed future retries.
@@ -3977,7 +3977,7 @@ class AIAgent:
             for chunk in stream:
                 last_chunk_time["t"] = time.time()
 
-                if self._interrupt_requested:
+                if self._interrupt_requested.is_set():
                     break
 
                 if not chunk.choices:
@@ -4133,7 +4133,7 @@ class AIAgent:
             # Use the Anthropic SDK's streaming context manager
             with self._anthropic_client.messages.stream(**api_kwargs) as stream:
                 for event in stream:
-                    if self._interrupt_requested:
+                    if self._interrupt_requested.is_set():
                         break
 
                     event_type = getattr(event, "type", None)
@@ -4322,7 +4322,7 @@ class AIAgent:
                 # the inner thread processes the closure.
                 last_chunk_time["t"] = time.time()
 
-            if self._interrupt_requested:
+            if self._interrupt_requested.is_set():
                 try:
                     if self.api_mode == "anthropic_messages":
                         from agent.anthropic_adapter import build_anthropic_client
@@ -5339,7 +5339,7 @@ class AIAgent:
         num_tools = len(tool_calls)
 
         # ── Pre-flight: interrupt check ──────────────────────────────────
-        if self._interrupt_requested:
+        if self._interrupt_requested.is_set():
             print(f"{self.log_prefix}⚡ Interrupt: skipping {num_tools} tool call(s)")
             for tc in tool_calls:
                 messages.append({
@@ -5524,7 +5524,7 @@ class AIAgent:
             # SAFETY: check interrupt BEFORE starting each tool.
             # If the user sent "stop" during a previous tool's execution,
             # do NOT start any more tools -- skip them all immediately.
-            if self._interrupt_requested:
+            if self._interrupt_requested.is_set():
                 remaining_calls = assistant_message.tool_calls[i-1:]
                 if remaining_calls:
                     self._vprint(f"{self.log_prefix}⚡ Interrupt: skipping {len(remaining_calls)} tool call(s)", force=True)
@@ -5762,7 +5762,7 @@ class AIAgent:
                     response_preview = function_result[:self.log_prefix_chars] + "..." if len(function_result) > self.log_prefix_chars else function_result
                     print(f"  ✅ Tool {i} completed in {tool_duration:.2f}s - {response_preview}")
 
-            if self._interrupt_requested and i < len(assistant_message.tool_calls):
+            if self._interrupt_requested.is_set() and i < len(assistant_message.tool_calls):
                 remaining = len(assistant_message.tool_calls) - i
                 self._vprint(f"{self.log_prefix}⚡ Interrupt: skipping {remaining} remaining tool call(s)", force=True)
                 for skipped_tc in assistant_message.tool_calls[i:]:
@@ -6310,7 +6310,7 @@ class AIAgent:
             self._checkpoint_mgr.new_turn()
 
             # Check for interrupt request (e.g., user sent new message)
-            if self._interrupt_requested:
+            if self._interrupt_requested.is_set():
                 interrupted = True
                 if not self.quiet_mode:
                     self._safe_print("\n⚡ Breaking out of tool loop due to interrupt...")
@@ -6633,7 +6633,7 @@ class AIAgent:
                         # Sleep in small increments to stay responsive to interrupts
                         sleep_end = time.time() + wait_time
                         while time.time() < sleep_end:
-                            if self._interrupt_requested:
+                            if self._interrupt_requested.is_set():
                                 self._vprint(f"{self.log_prefix}⚡ Interrupt detected during retry wait, aborting.", force=True)
                                 self._persist_session(messages, conversation_history)
                                 self.clear_interrupt()
@@ -7010,7 +7010,7 @@ class AIAgent:
                     self._vprint(f"{self.log_prefix}   ⏱️  Elapsed: {elapsed_time:.2f}s  Context: {len(api_messages)} msgs, ~{approx_tokens:,} tokens")
                     
                     # Check for interrupt before deciding to retry
-                    if self._interrupt_requested:
+                    if self._interrupt_requested.is_set():
                         self._vprint(f"{self.log_prefix}⚡ Interrupt detected during error handling, aborting retries.", force=True)
                         self._persist_session(messages, conversation_history)
                         self.clear_interrupt()
@@ -7369,7 +7369,7 @@ class AIAgent:
                     # instead of blocking the entire wait_time in one sleep() call
                     sleep_end = time.time() + wait_time
                     while time.time() < sleep_end:
-                        if self._interrupt_requested:
+                        if self._interrupt_requested.is_set():
                             self._vprint(f"{self.log_prefix}⚡ Interrupt detected during retry wait, aborting.", force=True)
                             self._persist_session(messages, conversation_history)
                             self.clear_interrupt()

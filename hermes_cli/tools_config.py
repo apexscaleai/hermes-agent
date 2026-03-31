@@ -20,6 +20,8 @@ from hermes_cli.config import (
     load_config, save_config, get_env_value, save_env_value,
 )
 from hermes_cli.colors import Colors, color
+from prompt_toolkit import print_formatted_text as _pt_print
+from prompt_toolkit.formatted_text import ANSI as _PT_ANSI
 
 logger = logging.getLogger(__name__)
 
@@ -1553,27 +1555,27 @@ def _print_tools_list(enabled_toolsets: set, mcp_servers: dict, platform: str = 
     effective = _get_effective_configurable_toolsets()
     builtin_keys = {ts_key for ts_key, _, _ in CONFIGURABLE_TOOLSETS}
 
-    print(f"Built-in toolsets ({platform}):")
+    _pt_print(_PT_ANSI(f"Built-in toolsets ({platform}):"))
     for ts_key, label, _ in effective:
         if ts_key not in builtin_keys:
             continue
         status = (color("✓ enabled", Colors.GREEN) if ts_key in enabled_toolsets
                   else color("✗ disabled", Colors.RED))
-        print(f"  {status}  {ts_key}  {color(label, Colors.DIM)}")
+        _pt_print(_PT_ANSI(f"  {status}  {ts_key}  {color(label, Colors.DIM)}"))
 
     # Plugin toolsets
     plugin_entries = [(k, l) for k, l, _ in effective if k not in builtin_keys]
     if plugin_entries:
-        print()
-        print(f"Plugin toolsets ({platform}):")
+        _pt_print(_PT_ANSI(""))
+        _pt_print(_PT_ANSI(f"Plugin toolsets ({platform}):"))
         for ts_key, label in plugin_entries:
             status = (color("✓ enabled", Colors.GREEN) if ts_key in enabled_toolsets
                       else color("✗ disabled", Colors.RED))
-            print(f"  {status}  {ts_key}  {color(label, Colors.DIM)}")
+            _pt_print(_PT_ANSI(f"  {status}  {ts_key}  {color(label, Colors.DIM)}"))
 
     if mcp_servers:
-        print()
-        print("MCP servers:")
+        _pt_print(_PT_ANSI(""))
+        _pt_print(_PT_ANSI("MCP servers:"))
         for srv_name, srv_cfg in mcp_servers.items():
             tools_cfg = srv_cfg.get("tools") or {}
             exclude = tools_cfg.get("exclude") or []

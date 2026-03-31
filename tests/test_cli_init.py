@@ -119,7 +119,7 @@ class TestBusyInputMode:
     def test_queue_command_works_while_idle(self):
         """When agent is idle, /queue should still queue (not reject)."""
         cli = _make_cli()
-        cli._agent_running = False
+        cli._agent_running = threading.Event()
         cli.process_command("/queue follow up")
         assert cli._pending_input.get_nowait() == "follow up"
 

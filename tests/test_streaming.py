@@ -86,7 +86,7 @@ class TestStreamingAccumulator:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -126,7 +126,7 @@ class TestStreamingAccumulator:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -173,7 +173,7 @@ class TestStreamingAccumulator:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -211,7 +211,7 @@ class TestStreamingAccumulator:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -252,7 +252,7 @@ class TestStreamingCallbacks:
             stream_delta_callback=lambda t: deltas.append(t),
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         agent._interruptible_streaming_api_call({})
 
@@ -283,7 +283,7 @@ class TestStreamingCallbacks:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         agent._interruptible_streaming_api_call(
             {}, on_first_delta=lambda: first_delta_calls.append(True)
@@ -321,7 +321,7 @@ class TestStreamingCallbacks:
             stream_delta_callback=lambda t: deltas.append(t),
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         agent._interruptible_streaming_api_call({})
 
@@ -356,7 +356,7 @@ class TestStreamingCallbacks:
             stream_delta_callback=lambda t: deltas.append(t),
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -413,7 +413,7 @@ class TestStreamingFallback:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -457,7 +457,7 @@ class TestStreamingFallback:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -484,7 +484,7 @@ class TestStreamingFallback:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         with pytest.raises(Exception, match="Rate limit exceeded"):
             agent._interruptible_streaming_api_call({})
@@ -525,7 +525,7 @@ class TestStreamingFallback:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -585,7 +585,7 @@ class TestStreamingFallback:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -640,7 +640,7 @@ class TestStreamingFallback:
             skip_memory=True,
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -685,7 +685,7 @@ class TestReasoningStreaming:
             reasoning_callback=lambda t: reasoning_deltas.append(t),
         )
         agent.api_mode = "chat_completions"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         response = agent._interruptible_streaming_api_call({})
 
@@ -753,7 +753,7 @@ class TestCodexStreamCallbacks:
             stream_delta_callback=lambda t: deltas.append(t),
         )
         agent.api_mode = "codex_responses"
-        agent._interrupt_requested = False
+        agent._interrupt_requested = threading.Event()
 
         # Mock the stream context manager
         mock_event_text = SimpleNamespace(

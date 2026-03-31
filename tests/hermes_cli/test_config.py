@@ -377,3 +377,87 @@ class TestAnthropicTokenMigration:
         }):
             migrate_config(interactive=False, quiet=True)
             assert load_env().get("ANTHROPIC_TOKEN") == "current-token"
+
+
+class TestFallbackModelRoundtrip:
+    """Verify fallback_model is saved and loaded correctly in all supported formats."""
+
+    def test_single_dict_fallback_roundtrips(self, tmp_path):
+        """Single dict format for fallback_model must survive save+load."""
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            config = load_config()
+            config["fallback_model"] = {
+                "provider": "openrouter",
+                "model": "anthropic/claude-sonnet-4",
+            }
+            save_config(config)
+
+            # Verify raw YAML is valid
+            raw = yaml.safe_load((tmp_path / "config.yaml").read_text())
+            assert raw["fallback_model"]["provider"] == "openrouter"
+            assert raw["fallback_model"]["model"] == "anthropic/claude-sonnet-4"
+
+            # Verify round-trip through load_config
+            reloaded = load_config()
+            assert reloaded["fallback_model"]["provider"] == "openrouter"
+            assert reloaded["fallback_model"]["model"] == "anthropic/claude-sonnet-4"
+
+    def test_list_of_fallbacks_roundtrips(self, tmp_path):
+        """List format for fallback_model must survive save+load."""
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            config = load_config()
+            config["fallback_model"] = [
+                {"provider": "openrouter", "model": "anthropic/claude-sonnet-4"},
+                {"provider": "zai", "model": "glm-4.7"},
+            ]
+            save_config(config)
+
+            # Verify raw YAML is valid and correctly formatted as a list
+            raw = yaml.safe_load((tmp_path / "config.yaml").read_text())
+            assert isinstance(raw["fallback_model"], list)
+            assert len(raw["fallback_model"]) == 2
+            assert raw["fallback_model"][0]["provider"] == "openrouter"
+            assert raw["fallback_model"][1]["provider"] == "zai"
+
+            # Verify round-trip through load_config
+            reloaded = load_config()
+            assert isinstance(reloaded["fallback_model"], list)
+            assert len(reloaded["fallback_model"]) == 2
+            assert reloaded["fallback_model"][0]["provider"] == "openrouter"
+            assert reloaded["fallback_model"][1]["provider"] == "zai"
+
+    def test_empty_fallback_does_not_append_comment_template(self, tmp_path):
+        """When fallback_model is empty/None, _FALLBACK_COMMENT should be appended."""
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            config = load_config()
+            config["fallback_model"] = None
+            save_config(config)
+
+            raw_text = (tmp_path / "config.yaml").read_text()
+            # The comment template should be appended since fb is invalid
+            assert "# ── Fallback Model ────────────────────────────────────────────────────" in raw_text
+
+    def test_single_dict_fallback_does_not_append_comment_template(self, tmp_path):
+        """When fallback_model is a valid single dict, _FALLBACK_COMMENT should NOT be appended."""
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            config = load_config()
+            config["fallback_model"] = {"provider": "openrouter", "model": "gpt-4o"}
+            save_config(config)
+
+            raw_text = (tmp_path / "config.yaml").read_text()
+            # The comment template should NOT be appended since fb is valid
+            assert "# ── Fallback Model ────────────────────────────────────────────────────" not in raw_text
+
+    def test_list_fallback_does_not_append_comment_template(self, tmp_path):
+        """When fallback_model is a valid list, _FALLBACK_COMMENT should NOT be appended."""
+        with patch.dict(os.environ, {"HERMES_HOME": str(tmp_path)}):
+            config = load_config()
+            config["fallback_model"] = [
+                {"provider": "openrouter", "model": "gpt-4o"},
+                {"provider": "zai", "model": "glm-4"},
+            ]
+            save_config(config)
+
+            raw_text = (tmp_path / "config.yaml").read_text()
+            # The comment template should NOT be appended since fb is valid
+            assert "# ── Fallback Model ────────────────────────────────────────────────────" not in raw_text
