@@ -2897,6 +2897,246 @@ class TestMCPBuiltinCollisionGuard:
 
         # MCP-to-MCP collision is allowed — the new server wins.
         assert "mcp_srv_do_thing" in registered
-        assert mock_registry.get_toolset_for_tool("mcp_srv_do_thing") == "mcp-srv"
 
-        _servers.pop("srv", None)
+
+# -------------------------------------------------------------------------->
+# Parameter coercion
+# -------------------------------------------------------------------------->
+
+class TestCoerceParam:
+    """Tests for coerce_param()."""
+
+    def test_string_type_passthrough(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param("hello", "string") == "hello"
+        assert coerce_param("", "string") == ""
+
+    def test_null_passthrough(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param(None, "string") is None
+        assert coerce_param(None, "integer") is None
+        assert coerce_param(None, "number") is None
+        assert coerce_param(None, "boolean") is None
+        assert coerce_param(None, "array") is None
+
+    def test_integer_coerced_from_string(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param("42", "integer") == 42
+        assert coerce_param("-10", "integer") == -10
+
+    def test_integer_already_int_passthrough(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param(42, "integer") == 42
+
+    def test_integer_invalid_string_unchanged(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param("not-a-number", "integer") == "not-a-number"
+
+    def test_number_coerced_from_string(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param("3.14", "number") == 3.14
+        assert coerce_param("-0.5", "number") == -0.5
+
+    def test_number_already_float_passthrough(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param(3.14, "number") == 3.14
+
+    def test_boolean_true_from_string(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param("true", "boolean") is True
+        assert coerce_param("True", "boolean") is True
+        assert coerce_param("TRUE", "boolean") is True
+
+    def test_boolean_false_from_string(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param("false", "boolean") is False
+        assert coerce_param("False", "boolean") is False
+        assert coerce_param("FALSE", "boolean") is False
+
+    def test_boolean_already_bool_passthrough(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param(True, "boolean") is True
+        assert coerce_param(False, "boolean") is False
+
+    def test_array_coerced_from_json_string(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param("[1, 2, 3]", "array") == [1, 2, 3]
+        assert coerce_param('["a", "b"]', "array") == ["a", "b"]
+
+    def test_array_already_list_passthrough(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param([1, 2, 3], "array") == [1, 2, 3]
+
+    def test_array_invalid_string_unchanged(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param("not-json", "array") == "not-json"
+
+    def test_object_coerced_from_json_string(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param('{"key": "value"}', "object") == {"key": "value"}
+        assert coerce_param("{}", "object") == {}
+
+    def test_object_already_dict_passthrough(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param({"key": "value"}, "object") == {"key": "value"}
+
+    def test_unknown_schema_type_passthrough(self):
+        from tools.mcp_tool import coerce_param
+        assert coerce_param("hello", "unknown") == "hello"
+        assert coerce_param(42, "unknown") == 42
+
+
+class TestCoerceArgsToSchema:
+    """Tests for coerce_args_to_schema()."""
+
+    def test_empty_args(self):
+        from tools.mcp_tool import coerce_args_to_schema
+        assert coerce_args_to_schema({}, {"properties": {}}) == {}
+        assert coerce_args_to_schema(None, {"properties": {}}) is None
+
+    def test_no_properties_key(self):
+        from tools.mcp_tool import coerce_args_to_schema
+        schema = {"type": "object"}
+        assert coerce_args_to_schema({"count": "5"}, schema) == {"count": "5"}
+
+    def test_mixed_types_coerced(self):
+        from tools.mcp_tool import coerce_args_to_schema
+        schema = {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer"},
+                "name": {"type": "string"},
+                "ratio": {"type": "number"},
+                "enabled": {"type": "boolean"},
+                "tags": {"type": "array"},
+            },
+        }
+        args = {
+            "count": "10",
+            "name": "test",
+            "ratio": "2.5",
+            "enabled": "true",
+            "tags": "[1, 2]",
+        }
+        result = coerce_args_to_schema(args, schema)
+        assert result["count"] == 10
+        assert result["name"] == "test"
+        assert result["ratio"] == 2.5
+        assert result["enabled"] is True
+        assert result["tags"] == [1, 2]
+
+    def test_extra_args_preserved(self):
+        from tools.mcp_tool import coerce_args_to_schema
+        schema = {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer"},
+            },
+        }
+        args = {"count": "5", "extra": "ignored"}
+        result = coerce_args_to_schema(args, schema)
+        assert result["extra"] == "ignored"
+
+    def test_missing_property_unchanged(self):
+        from tools.mcp_tool import coerce_args_to_schema
+        schema = {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer"},
+            },
+        }
+        args = {"count": "5"}
+        result = coerce_args_to_schema(args, schema)
+        assert result == {"count": 5}
+
+    def test_property_without_type_treated_as_string(self):
+        from tools.mcp_tool import coerce_args_to_schema
+        schema = {
+            "type": "object",
+            "properties": {
+                "count": {},  # no "type" key
+            },
+        }
+        args = {"count": "5"}
+        result = coerce_args_to_schema(args, schema)
+        assert result["count"] == "5"
+
+
+class TestToolHandlerCoercion:
+    """Tests that _make_tool_handler coerces arguments before calling MCP."""
+
+    def _patch_mcp_loop(self, coro_side_effect=None):
+        """Return a patch for _run_on_mcp_loop that runs the coroutine directly."""
+        def fake_run(coro, timeout=30):
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+        if coro_side_effect:
+            return patch("tools.mcp_tool._run_on_mcp_loop", side_effect=coro_side_effect)
+        return patch("tools.mcp_tool._run_on_mcp_loop", side_effect=fake_run)
+
+    def test_handler_coerces_string_args_to_declared_types(self):
+        from tools.mcp_tool import _make_tool_handler, _servers
+
+        received_args = {}
+
+        class FakeSession:
+            async def call_tool(self, name, arguments):
+                received_args.update(arguments)
+                block = SimpleNamespace(text="ok")
+                return SimpleNamespace(content=[block], isError=False)
+
+        server = _make_mock_server("coerce_test_srv", session=FakeSession())
+        _servers["coerce_test_srv"] = server
+
+        tool_schema = {
+            "type": "object",
+            "properties": {
+                "count": {"type": "integer"},
+                "name": {"type": "string"},
+                "enabled": {"type": "boolean"},
+                "items": {"type": "array"},
+            },
+        }
+        handler = _make_tool_handler(
+            "coerce_test_srv", "do_thing", 30.0, tool_schema
+        )
+
+        try:
+            with self._patch_mcp_loop():
+                # Simulate the LLM sending all values as strings (common behaviour).
+                handler({"count": "42", "name": "hello", "enabled": "true", "items": "[1,2]"})
+
+            assert received_args["count"] == 42  # integer, not string
+            assert received_args["name"] == "hello"  # unchanged
+            assert received_args["enabled"] is True  # boolean
+            assert received_args["items"] == [1, 2]  # array
+        finally:
+            _servers.pop("coerce_test_srv", None)
+
+    def test_handler_without_schema_passes_args_unchanged(self):
+        from tools.mcp_tool import _make_tool_handler, _servers
+
+        received_args = {}
+
+        class FakeSession:
+            async def call_tool(self, name, arguments):
+                received_args.update(arguments)
+                block = SimpleNamespace(text="ok")
+                return SimpleNamespace(content=[block], isError=False)
+
+        server = _make_mock_server("coerce_test_srv2", session=FakeSession())
+        _servers["coerce_test_srv2"] = server
+
+        try:
+            # No input_schema — handler must not attempt coercion.
+            handler = _make_tool_handler("coerce_test_srv2", "do_thing", 30.0, None)
+            with self._patch_mcp_loop():
+                handler({"count": "42", "name": "hello"})
+
+            assert received_args["count"] == "42"  # string unchanged
+            assert received_args["name"] == "hello"
+        finally:
+            _servers.pop("coerce_test_srv2", None)

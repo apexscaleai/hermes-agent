@@ -1144,11 +1144,16 @@ async def _connect_server(name: str, config: dict) -> MCPServerTask:
 # Handler / check-fn factories
 # ---------------------------------------------------------------------------
 
-def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
+def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float, input_schema: dict | None = None):
     """Return a sync handler that calls an MCP tool via the background loop.
 
     The handler conforms to the registry's dispatch interface:
     ``handler(args_dict, **kwargs) -> str``
+
+    Before forwarding arguments to the MCP server, parameter values are
+    coerced from strings to their declared inputSchema types so that
+    number, boolean, and array parameters are not rejected by the
+    server's Zod validation.
     """
 
     def _handler(args: dict, **kwargs) -> str:
@@ -1159,8 +1164,11 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
                 "error": f"MCP server '{server_name}' is not connected"
             })
 
+        # Coerce args to their declared schema types before sending to MCP.
+        coerced_args = coerce_args_to_schema(args, input_schema) if input_schema else args
+
         async def _call():
-            result = await server.session.call_tool(tool_name, arguments=args)
+            result = await server.session.call_tool(tool_name, arguments=coerced_args)
             # MCP CallToolResult has .content (list of content blocks) and .isError
             if result.isError:
                 error_text = ""
@@ -1404,6 +1412,90 @@ def _normalize_mcp_input_schema(schema: dict | None) -> dict:
         return {**schema, "properties": {}}
 
     return schema
+
+
+def coerce_param(value: Any, schema_type: str) -> Any:
+    """Coerce a single value to the type declared in an inputSchema.
+
+    Handles the common case where the LLM sends all parameters as strings,
+    but the MCP server's Zod validation expects properly typed values.
+
+    Args:
+        value: The parameter value (possibly a string from JSON serialization).
+        schema_type: The type string from the inputSchema property (e.g.
+            "string", "number", "integer", "boolean", "array", "object").
+
+    Returns:
+        The coerced value, or the original value if coercion is not
+        applicable / fails.
+    """
+    # None / already correct type — pass through unchanged
+    if value is None:
+        return None
+    if schema_type == "string":
+        return value
+    if schema_type in ("number", "integer", "boolean", "array", "object"):
+        # If already the right type (not a string), use it directly
+        if not isinstance(value, str):
+            return value
+
+        # Coerce string values based on declared type
+        if schema_type == "integer":
+            try:
+                return int(value)
+            except (ValueError, TypeError):
+                return value
+        if schema_type == "number":
+            try:
+                return float(value)
+            except (ValueError, TypeError):
+                return value
+        if schema_type == "boolean":
+            # Handle explicit string "true"/"false" and general truthy strings
+            if isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered in ("true", "false"):
+                    return lowered == "true"
+            try:
+                return bool(value)
+            except (ValueError, TypeError):
+                return value
+        if schema_type in ("array", "object"):
+            try:
+                return json.loads(value)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                return value
+    return value
+
+
+def coerce_args_to_schema(args: dict, schema: dict) -> dict:
+    """Coerce all argument values in *args* to their declared schema types.
+
+    Reads the ``properties`` dictionary from *schema* to determine the
+    expected type for each parameter, then passes each value through
+    :func:`coerce_param`.
+
+    Args:
+        args: The raw arguments dict (typically with string values).
+        schema: An inputSchema dict with a ``properties`` key mapping
+            parameter names to objects that include a ``type`` field.
+
+    Returns:
+        A new dict with values coerced to their declared types. Missing
+        properties or properties without an explicit ``type`` are left
+        unchanged.
+    """
+    if not args or not isinstance(args, dict):
+        return args
+    properties = schema.get("properties") if isinstance(schema, dict) else None
+    if not properties:
+        return args
+    return {
+        key: coerce_param(args[key], properties[key].get("type", "string"))
+        if key in args and key in properties
+        else args[key]
+        for key in args
+    }
 
 
 def _convert_mcp_schema(server_name: str, mcp_tool) -> dict:
@@ -1683,7 +1775,7 @@ def _register_server_tools(name: str, server: MCPServerTask, config: dict) -> Li
             name=tool_name_prefixed,
             toolset=toolset_name,
             schema=schema,
-            handler=_make_tool_handler(name, mcp_tool.name, server.tool_timeout),
+            handler=_make_tool_handler(name, mcp_tool.name, server.tool_timeout, mcp_tool.inputSchema),
             check_fn=_make_check_fn(name),
             is_async=False,
             description=schema["description"],
