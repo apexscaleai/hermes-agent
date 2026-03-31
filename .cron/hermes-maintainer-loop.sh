@@ -130,21 +130,4 @@ echo "[cron] ✓ Pushed to https://github.com/apexscaleai/hermes-agent/tree/$FIX
 echo "[cron] ✓ Commit: https://github.com/apexscaleai/hermes-agent/commit/$COMMIT_SHA"
 echo "[cron] ✓ All done. Ready for PR against NousResearch/hermes-agent."
 
-# ─── Anti-cherry-pick note ─────────────────────────────────────────────────
-# To open a PR that preserves full history and encourages merge (not squash):
-#   gh pr create \
-#     --base main \
-#     --head apexscaleai:$FIX_BRANCH \
-#     --title "fix: thread safety, ANSI output, and fallback_model config (maintainer contribs)" \
-#     --body-file <(cat <<'EOF'
-# These are targeted, atomic fixes for three confirmed bugs in hermes-agent.
-# Each fix is a separate logical unit with tests — intended for merge (not squash).
-#
-# Fixes:
-#   - #4072  Thread safety: _agent_running and _interrupt_requested → threading.Event
-#   - #4128  /tools list: raw ANSI escapes → properly rendered via _pt_print + _PT_ANSI
-#   - #4091  fallback_model config: clarify YAML format + save_config round-trip safety
-#
-# All tests pass. Please merge as a series to preserve authorship and history.
-# EOF
-# )
+
